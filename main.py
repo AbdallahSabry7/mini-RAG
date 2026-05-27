@@ -1,7 +1,8 @@
 from fastapi import FastAPI
-app = FastAPI()
+from routes.base import base_router
 
-@app.get("/welcome")
-def welcome():
-    return {"message": "Welcome to the mini-RAG API!"}  
+app = FastAPI()
+app.include_router(base_router)
+
+
 
