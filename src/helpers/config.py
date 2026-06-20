@@ -7,6 +7,7 @@ class Settings(BaseSettings):
 
     FILE_TYPE: list[str]
     FILE_SIZE_LIMIT: int
+    FILE_CHUNK_SIZE: int
 
     model_config = SettingsConfigDict(
         env_file=".env",
