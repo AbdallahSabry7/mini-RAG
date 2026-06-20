@@ -40,5 +40,6 @@ async def process_data(project_id: str, file: UploadFile,
         logger.error(f"Error occurred while saving the file: {str(e)}")
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=models.ResponseStatus.File_Upload_Failed.value)
 
-    return JSONResponse(status_code=status.HTTP_200_OK, content= models.ResponseStatus.File_Upload_Success.value)
+    return JSONResponse(status_code=status.HTTP_200_OK, content= models.ResponseStatus.File_Upload_Success.value , 
+                        file_id = filename)
     
