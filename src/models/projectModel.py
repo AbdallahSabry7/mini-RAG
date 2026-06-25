@@ -23,7 +23,8 @@ class ProjectModel(DataBaseModel):
 
     async def create_project(self,project_data:project):
         result = await self.connection.insert_one(project_data.dict(by_alias=True, exclude_unset=True))
-        return result.inserted_id
+        project_data.id = result.inserted_id
+        return project_data
     
     async def get_project_or_create(self, project_id: str):
         record = await self.connection.find_one({"project_id": project_id})
@@ -35,7 +36,7 @@ class ProjectModel(DataBaseModel):
                 new_project.model_dump(by_alias=True, exclude_unset=True)
             )
 
-            new_project._id = result.inserted_id
+            new_project.id = result.inserted_id
             return new_project
 
         return project(**record)

@@ -10,7 +10,9 @@ import aiofiles
 import models
 import logging
 from .schemas import processData 
-from models.db_schemas import DataChunk
+from models.db_schemas import DataChunk , FileSchema
+from models.FilesModel import FilesModel
+from models.enums.FileEnums import FileEnums
 
 logger = logging.getLogger('uvicorn.error')
 
@@ -49,9 +51,21 @@ async def process_data(req: Request, project_id: str, file: UploadFile,
     except Exception as e:
         logger.error(f"Error occurred while saving the file: {str(e)}")
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=models.ResponseStatus.File_Upload_Failed.value)
+    
+    file_model = await FilesModel.create_instance(
+        db_conn=req.app.state.mongodb_database
+    )
+
+    file = FileSchema(
+        file_name = filename,
+        project_id = project.id,
+        file_size = os.path.getsize(file_location),
+        file_type = FileEnums.FILE.value
+    )
+    file_record = await file_model.create_file(file_data=file)
 
     return JSONResponse(status_code=status.HTTP_200_OK, content={'signal' : models.ResponseStatus.File_Upload_Success.value,
-                        'file_id': filename , 'project_id': str(project._id)})
+                        'file_id': str(file_record.id) , 'project_id': str(project.id)})
     
 
 @data_router.post("/process_file/{project_id}")

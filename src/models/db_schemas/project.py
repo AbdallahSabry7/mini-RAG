@@ -8,7 +8,7 @@ class project(BaseModel):
     )
         
     id: Optional[ObjectId] = Field(default=None, alias="_id")
-    project_id : str = Field(..., min_Length =1)
+    project_id : str = Field(..., min_length =1)
 
     @field_validator('project_id')
     @classmethod
