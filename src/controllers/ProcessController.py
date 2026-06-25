@@ -18,6 +18,9 @@ class ProcessController(BaseController):
             self.projectpath,
             filename
         )
+
+        if os.path.exists(file_path) is False:
+            return None
         
         if file_extension == ProcessEnums.PDF.value:
             return PyMuPDFLoader(file_path)
@@ -28,7 +31,10 @@ class ProcessController(BaseController):
         
     def get_file_content(self , project_id:str , filename:str):
         loader = self.get_file_loader(filename)
-        return loader.load()
+        if loader:
+            return loader.load()
+        else:
+            return None
 
     def process_file_content(self, file_content: list, file_id:str,
                             chunk_size: int = 100, chunk_overlap: int = 20):

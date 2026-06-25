@@ -8,7 +8,7 @@ class FileSchema(BaseModel):
     )
     id: ObjectId = Field(default_factory=ObjectId, alias="_id")
     file_name: str = Field(..., min_length=1)
-    file_project_id : ObjectId = Field(..., alias="project_id")
+    file_project_id : ObjectId = Field(..., alias="file_project_id")
     file_type: str = Field(..., min_length=1)
     file_size: int = Field(..., ge=0)
     file_config : dict = Field(default={})

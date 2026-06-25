@@ -27,8 +27,22 @@ class FilesModel(DataBaseModel):
         file_data.id = result.inserted_id
         return file_data
     
-    async def get_all_project_files(self, file_project_id: str):
-        return await self.connection.find({"file_project_id": ObjectId(file_project_id) if file_project_id is str else file_project_id}).to_list(length=None)
+    async def get_all_project_files(self, file_project_id: str , file_type: str):
+        records = await self.connection.find({"file_project_id": ObjectId(file_project_id) if file_project_id is str else file_project_id,
+                                        "file_type": file_type
+                                        }, ).to_list(length=None)
+        
+        return [FileSchema(**record) for record in records]
+    
+    async def get_file_by_filename(self, file_project_id: str , file_name: str):
+        record = await self.connection.find_one({"file_project_id": ObjectId(file_project_id) if file_project_id is str else file_project_id,
+                                        "file_name": file_name
+                                        })
+        
+        if record is None:
+            return None
+        
+        return FileSchema(**record)
 
 
 

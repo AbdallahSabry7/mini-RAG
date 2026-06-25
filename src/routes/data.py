@@ -58,19 +58,18 @@ async def process_data(req: Request, project_id: str, file: UploadFile,
 
     file = FileSchema(
         file_name = filename,
-        project_id = project.id,
+        file_project_id = project.id,
         file_size = os.path.getsize(file_location),
         file_type = FileEnums.FILE.value
     )
     file_record = await file_model.create_file(file_data=file)
 
     return JSONResponse(status_code=status.HTTP_200_OK, content={'signal' : models.ResponseStatus.File_Upload_Success.value,
-                        'file_id': str(file_record.id) , 'project_id': str(project.id)})
+                        'file_id': str(file_record.id) , 'file_project_id': str(project.id)})
     
 
 @data_router.post("/process_file/{project_id}")
 async def process_file(req: Request, project_id: str, data: processData):
-    file_id = data.file_id
     chunk_size = data.chunk_size
     overlap = data.overlap
     reset = data.reset
@@ -81,28 +80,71 @@ async def process_file(req: Request, project_id: str, data: processData):
 
     project = await project_model.get_project_or_create(project_id=project_id)
 
+    projects_files_ids = {}
+
+    file_model = await FilesModel.create_instance(
+        db_conn=req.app.state.mongodb_database
+    )
+
+    if data.file_id:
+        file_record = await file_model.get_file_by_filename(file_project_id=project.id, file_name=data.file_id)
+        if file_record is None:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"signal": models.ResponseStatus.File_Not_Found.value})
+        
+        projects_files_ids = {
+            file_record.id : file_record.file_name
+        }
+        
+    else:
+        projects_files = await file_model.get_all_project_files(file_project_id=project.id, file_type=FileEnums.FILE.value)
+        projects_files_ids = {
+            record.id : record.file_name
+            for record in projects_files
+        }
+
+    if  len(projects_files_ids) == 0:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"signal": models.ResponseStatus.No_Chunks_Found.value})
+
+
+
     process_controller = ProcessController(project_id=project_id)
-    file_content = process_controller.get_file_content(project_id=project_id, filename=file_id)
-    chunks = process_controller.process_file_content(file_content=file_content, file_id=file_id,
-                                                        chunk_size=chunk_size, chunk_overlap=overlap)
-    
-    if chunks is None or len(chunks) == 0:
-        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"signal": models.ResponseStatus.File_processing_failed.value})
-    
-    chunks_record = [
-        DataChunk(chunk_text=chunk.page_content, chunk_metadata=chunk.metadata, chunk_order=i+1, chunk_project_id=project.id)
-        for i,chunk in enumerate(chunks)
-    ]
+
+    no_records = 0
+    no_files = 0
 
     chunk_model = await ChunkModel.create_instance(
         db_conn=req.app.state.mongodb_database
     )
 
     if reset == 1:
-        no_deleted = await chunk_model.delete_chunks_by_project_id(project_id=project.id)
+        no_deleted = await chunk_model.delete_chunks_by_project_id(
+                project_id=project.id
+            )
+        
+        return JSONResponse(status_code=status.HTTP_200_OK, content={"signal": models.ResponseStatus.File_delete_success.value, "deleted_records": no_deleted})
+        
+    else:
 
-        return JSONResponse(status_code=status.HTTP_200_OK, content={"signal": models.ResponseStatus.File_Processed_Success.value, "deleted_records": no_deleted})
+        for file_id, file_name in projects_files_ids.items():
 
-    no_records = await chunk_model.create_chunks_bulk(chunks=chunks_record)
+            file_content = process_controller.get_file_content(project_id=project_id, filename=file_name)
 
-    return JSONResponse(status_code=status.HTTP_200_OK, content={"signal": models.ResponseStatus.File_Processed_Success.value, "inserted_records": no_records})
+            if file_content is None:
+                logger.error(f"File content is None for file_id: {file_id} in project_id: {project_id}")
+                continue
+            
+            chunks = process_controller.process_file_content(file_content=file_content, file_id=file_name,
+                                                                chunk_size=chunk_size, chunk_overlap=overlap)
+            
+            if chunks is None or len(chunks) == 0:
+                return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"signal": models.ResponseStatus.File_processing_failed.value})
+            
+            chunks_record = [
+                DataChunk(chunk_text=chunk.page_content, chunk_metadata=chunk.metadata, chunk_order=i+1, chunk_project_id=project.id , chunk_file_id=file_id)
+                for i,chunk in enumerate(chunks)
+            ]
+
+            no_records += await chunk_model.create_chunks_bulk(chunks=chunks_record)
+            no_files += 1
+
+        return JSONResponse(status_code=status.HTTP_200_OK, content={"signal": models.ResponseStatus.File_Processed_Success.value, "inserted_records": no_records, "processed_files": no_files})
