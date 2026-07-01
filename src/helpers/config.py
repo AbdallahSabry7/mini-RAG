@@ -20,6 +20,8 @@ class Settings(BaseSettings):
 
     COHERE_API_KEY: str
 
+    GEMINI_API_KEY = ""
+
     GENERATION_MODEL_ID: str
     EMBEDDING_MODEL_ID: str
     EMBEDDING_MODEL_SIZE: int
@@ -27,6 +29,10 @@ class Settings(BaseSettings):
     INPUT_DEFAULT_MAX_TOKENS: int
     GENERATION_DEFAULT_MAX_TOKENS: int
     GENERATION_DEFAULT_TEMPERATURE: float
+
+    VECTOR_DB_BACKEND: str  
+    VECTOR_DB_PATH: str 
+    VECTOR_DB_DISTANCE_METRIC: str 
 
     model_config = SettingsConfigDict(
         env_file=".env",

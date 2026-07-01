@@ -60,4 +60,71 @@ class QDrantDB(VectorDBInterface):
         else:
             self.logger.warning(f"Collection '{collection_name}' already exists. Skipping creation.")
             return False
+        
+    def insert_collection(self, collection_name:str, text:str, vector:list, metadata:dict = None, record_id:str = None):
+        
+        if not self.is_collection_exists(collection_name):
+            self.logger.error(f"Collection '{collection_name}' does not exist. Please create the collection before inserting data.")
+            return False
+        
+        try:
+            _ = self.client.upload_records(
+                collection_name=collection_name,
+                records=[
+                    models.Record(
+                        vector=vector,
+                        payload={"text": text, "metadata": metadata} if metadata else {"text": text},
+                    )
+                ]
+            )
+
+        except Exception as e:
+            self.logger.error(f"Failed to insert record into collection '{collection_name}': {e}")
+            return False
+        
+        return True
     
+
+    def insert_collection_batch(self, collection_name:str, texts:list, vectors:list, metadatas:list = None, record_ids:list = None, batch_size:int = 100):
+        if not self.is_collection_exists(collection_name):
+            self.logger.error(f"Collection '{collection_name}' does not exist. Please create the collection before inserting data.")
+            return False
+        
+        if metadatas is None:
+            metadatas = [None] * len(texts)
+
+        if record_ids is None:
+            record_ids = [None] * len(texts)
+
+        try:
+            for i in range(0, len(texts), batch_size):
+                batch_end = min(i + batch_size, len(texts))
+                batch_texts = texts[i:i + batch_end]
+                batch_vectors = vectors[i:i + batch_end]
+                batch_metadatas = metadatas[i:i + batch_end]
+                batch_record_ids = record_ids[i:i + batch_end]
+
+                records = [
+                    models.Record(
+                        vector=vector,
+                        payload={"text": text, "metadata": metadata} if metadata else {"text": text},
+                    )
+                    for text, vector, metadata in zip(batch_texts, batch_vectors, batch_metadatas)
+                ]
+
+                _ = self.client.upload_records(
+                    collection_name=collection_name,
+                    records=records
+                )
+
+                return True
+        except Exception as e:
+            self.logger.error(f"Failed to insert batch records into collection '{collection_name}': {e}")
+            return False
+        
+    def search_collection_by_vector(self, collection_name:str , vector:list , limit:int = 10):
+        return self.client.search(
+            collection_name=collection_name,
+            query_vector=vector,
+            limit=limit
+        )
