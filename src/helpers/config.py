@@ -20,7 +20,7 @@ class Settings(BaseSettings):
 
     COHERE_API_KEY: str
 
-    GEMINI_API_KEY = ""
+    GEMINI_API_KEY: str
 
     GENERATION_MODEL_ID: str
     EMBEDDING_MODEL_ID: str

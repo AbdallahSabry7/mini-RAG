@@ -16,6 +16,10 @@ class Gemini_provider(LLMInterface):
         self.embedding_model_id = None
         self.embedding_size = None
 
+        self.client = genai.Client(api_key=self.api_key)
+
+        self.logger = logging.getLogger(__name__)
+
     def set_generator(self, model_id: str):
         self.generator_model_id = model_id
         self.logger.info(f"Generator model set to: {model_id}")

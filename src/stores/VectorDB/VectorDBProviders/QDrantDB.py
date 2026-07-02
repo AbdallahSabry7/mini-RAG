@@ -79,6 +79,7 @@ class QDrantDB(VectorDBInterface):
                 collection_name=collection_name,
                 records=[
                     models.Record(
+                        id=record_id,
                         vector=vector,
                         payload={"text": text, "metadata": metadata} if metadata else {"text": text},
                     )
@@ -100,9 +101,6 @@ class QDrantDB(VectorDBInterface):
         if metadatas is None:
             metadatas = [None] * len(texts)
 
-        if record_ids is None:
-            record_ids = [None] * len(texts)
-
         try:
             for i in range(0, len(texts), batch_size):
                 batch_end = min(i + batch_size, len(texts))
@@ -113,10 +111,11 @@ class QDrantDB(VectorDBInterface):
 
                 records = [
                     models.Record(
+                        id=record_id,
                         vector=vector,
                         payload={"text": text, "metadata": metadata} if metadata else {"text": text},
                     )
-                    for text, vector, metadata in zip(batch_texts, batch_vectors, batch_metadatas)
+                    for text, vector, metadata, record_id in zip(batch_texts, batch_vectors, batch_metadatas, batch_record_ids)
                 ]
 
                 _ = self.client.upload_records(

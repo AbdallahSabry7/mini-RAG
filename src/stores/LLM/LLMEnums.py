@@ -2,8 +2,8 @@ from enum import Enum
 
 class LLMEnums(Enum):
     OPENAI = "openai"
-    cohere = "cohere"
-    Gemini = "gemini"
+    COHERE = "cohere"
+    GEMINI = "gemini"
 
 class OpenAIEnums(Enum):
     SYSTEM = "system"
@@ -24,3 +24,4 @@ class GeminiEnums(Enum):
 class DocumentTypeEnums(Enum):
     DOCUMENT = "document"
     QUERY = "query"
+    RETRIEVAL_DOCUMENT = "RETRIEVAL_DOCUMENT"

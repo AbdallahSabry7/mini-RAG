@@ -12,14 +12,14 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     app.state.mongodb_client = AsyncIOMotorClient(settings.MONGODB_URl)
     app.state.mongodb_database = app.state.mongodb_client[settings.MONGODB_DATABASE]
-    llm_factory = LLMProviderFactory(config=settings.dict())
+    llm_factory = LLMProviderFactory(config=settings)
     app.state.generation_client = llm_factory.create_provider(settings.GENERATION_BACKEND)
     app.state.generation_client.set_generator(settings.GENERATION_MODEL_ID)
 
     app.state.embedding_client = llm_factory.create_provider(settings.EMBEDDING_BACKEND)
     app.state.embedding_client.set_embedding(settings.EMBEDDING_MODEL_ID, settings.EMBEDDING_MODEL_SIZE)
 
-    vector_db_factory = VectorDBFactory(config=settings.dict())
+    vector_db_factory = VectorDBFactory(config=settings)
 
     app.state.vector_db_client = vector_db_factory.create_vector_db(settings.VECTOR_DB_BACKEND)
     app.state.vector_db_client.connect()

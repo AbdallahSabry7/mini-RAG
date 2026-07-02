@@ -11,3 +11,5 @@ class ResponseStatus(Enum):
     File_Upload_Failed = "Failed to upload file."
     No_Chunks_Found = "No chunks found for the given project."
     File_Not_Found = "File not found."
+    FAILED_TO_INSERT_CHUNKS = "Failed to insert data chunks into vector database."
+    SUCCESSFULLY_INSERTED_CHUNKS = "Successfully inserted data chunks into vector database."
