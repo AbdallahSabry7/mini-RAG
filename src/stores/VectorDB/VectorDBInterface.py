@@ -2,11 +2,11 @@ from abc import ABC, abstractmethod
 
 class VectorDBInterface(ABC):
     @abstractmethod
-    def connect_to_vector_db(self):
+    def connect(self):
         pass
 
     @abstractmethod
-    def disconnect_from_vector_db(self):
+    def disconnect(self):
         pass
 
     @abstractmethod

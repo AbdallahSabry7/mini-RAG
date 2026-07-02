@@ -46,11 +46,12 @@ class ChunkModel(DataBaseModel):
         result = await self.connection.delete_many({"chunk_project_id": project_id})
         return result.deleted_count
     
-    async def get_data_chunks_by_project_id(self, project_id: str , page: int = 1, page_size: int = 10):
+    async def get_data_chunks_by_project_id(self, project_id: ObjectId, page: int = 1, page_size: int = 10):
         skip = (page - 1) * page_size
-        cursor = self.connection.find({"chunk_project_id": project_id}).skip(skip).limit(page_size)
-        data_chunks = []
-        async for document in cursor:
-            data_chunks.append(DataChunk(**document))
-        return data_chunks
+        records = await self.connection.find({"chunk_project_id": project_id}).skip(skip).limit(page_size).to_list(length=None)
+
+        return [
+            DataChunk(**record)
+            for record in records
+            ]
     

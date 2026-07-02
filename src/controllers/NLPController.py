@@ -21,7 +21,8 @@ class NLPController(BaseController):
         collection_name = self.create_collection_name(project_id=project.project_id)
         collection_info = self.vector_db_client.get_collection_info(collection_name = collection_name)
         return collection_info
-    def index_into_vector_db(self, project : project, data_chunks : list[DataChunk]):
+    
+    def index_into_vector_db(self, project : project, data_chunks : list[DataChunk] , do_reset : bool = False , chunks_ids : list[int] = None):
 
         collection_name = self.create_collection_name(project_id=project.project_id)
 
@@ -29,13 +30,13 @@ class NLPController(BaseController):
         metadatas = [chunk.chunk_metadata for chunk in data_chunks]
 
         vectors = [
-            self.generate_embedding(text = text , document_type = DocumentTypeEnums.DOCUMENT.value)
+            self.embedding_client.generate_embedding(text = text , document_type = DocumentTypeEnums.RETRIEVAL_DOCUMENT.value)
             for text in texts
         ]
 
         self.vector_db_client.create_collection(collection_name=collection_name, embedding_size=self.embedding_client.embedding_size, do_reset=False)
 
-        self.vector_db_client.insert_collection_batch(collection_name=collection_name, vectors=vectors, texts=texts, metadata=metadatas, do_reset=False)
+        self.vector_db_client.insert_collection_batch(collection_name=collection_name, vectors=vectors, texts=texts, metadatas=metadatas, record_ids=chunks_ids)
 
         return True
         
