@@ -37,6 +37,13 @@ class QDrantDB(VectorDBInterface):
     def list_all_collections(self, collection_name: str) -> List:
         return self.client.get_collections(collection_name=collection_name)
     
+    def get_collection_info(self, collection_name:str):
+        if self.is_collection_exists(collection_name):
+            return self.client.get_collection(collection_name=collection_name)
+        else:
+            self.logger.warning(f"Collection '{collection_name}' does not exist.")
+            return None
+    
     
     def delete_collection(self, collection_name:str):
         if self.is_collection_exists(collection_name):
