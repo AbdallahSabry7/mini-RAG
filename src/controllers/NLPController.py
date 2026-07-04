@@ -41,3 +41,23 @@ class NLPController(BaseController):
         return True
         
 
+    def search_vector_db(self, project : project, query_text : str, limit : int = 10):
+        collection_name = self.create_collection_name(project_id=project.project_id)
+
+        embedding_vector = self.embedding_client.generate_embedding(
+            text=query_text,
+            document_type=DocumentTypeEnums.RETRIEVAL_QUERY.value
+        )
+
+        if embedding_vector is None:
+            self.logger.error("Failed to generate embedding for the query text.")
+            return False
+
+        search_results = self.vector_db_client.search_collection_by_vector(
+            collection_name=collection_name,
+            vector=embedding_vector,
+            limit=limit
+        )
+
+        return search_results
+

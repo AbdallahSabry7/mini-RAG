@@ -83,7 +83,7 @@ class Gemini_provider(LLMInterface):
         
         config = None
         if document_type:
-            config = types.EmbedContentConfig(task_type=document_type)
+            config = types.EmbedContentConfig(task_type=document_type , output_dimensionality=768)
 
         try:
             response = self.client.models.embed_content(

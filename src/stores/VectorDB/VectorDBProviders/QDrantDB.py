@@ -3,6 +3,7 @@ from ..VectorDBEnums import VectorDBType , DistanceMetric
 from ..VectorDBInterface import VectorDBInterface
 import logging
 from typing import List
+import json
 
 class QDrantDB(VectorDBInterface):
     def __init__(self, db_path : str , distance_metric : str):
@@ -39,7 +40,9 @@ class QDrantDB(VectorDBInterface):
     
     def get_collection_info(self, collection_name:str):
         if self.is_collection_exists(collection_name):
-            return self.client.get_collection(collection_name=collection_name)
+            collection = self.client.get_collection(collection_name=collection_name)
+            collection = json.dumps(collection, default= lambda o: o.__dict__)
+            return json.loads(collection)
         else:
             self.logger.warning(f"Collection '{collection_name}' does not exist.")
             return None
@@ -75,7 +78,7 @@ class QDrantDB(VectorDBInterface):
             return False
         
         try:
-            _ = self.client.upload_records(
+            _ = self.client.upload_points(
                 collection_name=collection_name,
                 records=[
                     models.Record(
@@ -104,10 +107,10 @@ class QDrantDB(VectorDBInterface):
         try:
             for i in range(0, len(texts), batch_size):
                 batch_end = min(i + batch_size, len(texts))
-                batch_texts = texts[i:i + batch_end]
-                batch_vectors = vectors[i:i + batch_end]
-                batch_metadatas = metadatas[i:i + batch_end]
-                batch_record_ids = record_ids[i:i + batch_end]
+                batch_texts = texts[i: batch_end]
+                batch_vectors = vectors[i: batch_end]
+                batch_metadatas = metadatas[i: batch_end]
+                batch_record_ids = record_ids[i: batch_end]
 
                 records = [
                     models.Record(
@@ -118,9 +121,9 @@ class QDrantDB(VectorDBInterface):
                     for text, vector, metadata, record_id in zip(batch_texts, batch_vectors, batch_metadatas, batch_record_ids)
                 ]
 
-                _ = self.client.upload_records(
+                _ = self.client.upload_points(
                     collection_name=collection_name,
-                    records=records
+                    points=records
                 )
 
                 return True
@@ -129,8 +132,13 @@ class QDrantDB(VectorDBInterface):
             return False
         
     def search_collection_by_vector(self, collection_name:str , vector:list , limit:int = 10):
-        return self.client.search(
+        result = self.client.query_points(
             collection_name=collection_name,
-            query_vector=vector,
+            query=vector,
             limit=limit
         )
+        if result is None or not result:
+            self.logger.warning(f"No results found for the given vector in collection '{collection_name}'.")
+            return []
+        result = json.dumps(result, default=lambda o: o.__dict__)
+        return json.loads(result)

@@ -25,3 +25,4 @@ class DocumentTypeEnums(Enum):
     DOCUMENT = "document"
     QUERY = "query"
     RETRIEVAL_DOCUMENT = "RETRIEVAL_DOCUMENT"
+    RETRIEVAL_QUERY = "RETRIEVAL_QUERY"
