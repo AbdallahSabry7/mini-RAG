@@ -1,2 +1,2 @@
 from .data import processData
-from .nlp_schema import NLPRequest
+from .nlp_schema import NLPRequest , SearchRequest
