@@ -17,5 +17,6 @@ document_template = Template("/n".join([
 footer_template = Template("/n".join([
     "Please provide a concise and accurate answer to the question based on the information from the documents above. ",
     "If the answer is not contained within the documents, say 'I could not find an answer in the provided documents.'",
+    "##question: $question\n",
     "##Answer:"
 ]))

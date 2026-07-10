@@ -78,8 +78,7 @@ class NLPController(BaseController):
             for idx, result in enumerate(search_results)
         ])
 
-        footer_prompt = self.template_parser.get(group="rag", key="footer_template")
-        footer_prompt = footer_prompt.substitute()
+        footer_prompt = self.template_parser.get(group="rag", key="footer_template", vars={"question": query})
 
         chat_history = [self.generation_client.construct_prompt(prompt=system_prompt, role=self.generation_client.enums.SYSTEM.value)]
 
