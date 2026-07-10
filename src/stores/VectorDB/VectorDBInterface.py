@@ -1,4 +1,6 @@
 from abc import ABC, abstractmethod
+from typing import List
+from models.db_schemas import retrievedchunk
 
 class VectorDBInterface(ABC):
     @abstractmethod
@@ -38,6 +40,6 @@ class VectorDBInterface(ABC):
         pass
 
     @abstractmethod
-    def search_collection_by_vector(self, collection_name:str , vector:list , limit:int = 10):
+    def search_collection_by_vector(self, collection_name:str , vector:list , limit:int = 10) -> List[retrievedchunk]:
         pass
 

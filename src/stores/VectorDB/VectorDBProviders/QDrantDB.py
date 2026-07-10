@@ -4,6 +4,7 @@ from ..VectorDBInterface import VectorDBInterface
 import logging
 from typing import List
 import json
+from models.db_schemas import retrievedchunk
 
 class QDrantDB(VectorDBInterface):
     def __init__(self, db_path : str , distance_metric : str):
@@ -140,5 +141,13 @@ class QDrantDB(VectorDBInterface):
         if result is None or not result:
             self.logger.warning(f"No results found for the given vector in collection '{collection_name}'.")
             return []
-        result = json.dumps(result, default=lambda o: o.__dict__)
-        return json.loads(result)
+        
+        return [
+            retrievedchunk(
+                **{
+                        "text": record.payload["text"],
+                        "score": record.score
+                    }
+            )
+            for record in result.points
+        ]
