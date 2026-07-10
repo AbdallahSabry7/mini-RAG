@@ -18,6 +18,8 @@ class Gemini_provider(LLMInterface):
 
         self.client = genai.Client(api_key=self.api_key)
 
+        self.enums = GeminiEnums
+
         self.logger = logging.getLogger(__name__)
 
     def set_generator(self, model_id: str):
@@ -33,7 +35,7 @@ class Gemini_provider(LLMInterface):
         return text[:self.default_input_max_tokens].strip()
     
     
-    def generate_text(self, prompt: str, chat_history: list = None, max_output_tokens: int = None, temperature: float = None, top_p: float = None):
+    def generate_text(self, prompt: str, chat_history: list = None, max_output_tokens: int = 512, temperature: float = 0.1, top_p: float = 0.1):
         if not self.client:
             self.logger.error("Gemini client is not initialized.")
             return None
