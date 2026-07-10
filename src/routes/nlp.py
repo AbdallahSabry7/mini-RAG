@@ -103,7 +103,8 @@ async def search_index(req: Request, project_id: str, search_request: SearchRequ
     nlp_controller = NLPController(
         vector_db_client=req.app.state.vector_db_client,
         generation_client=req.app.state.generation_client,
-        embedding_client=req.app.state.embedding_client
+        embedding_client=req.app.state.embedding_client,
+        template_parser=req.app.state.template_parser
     )
 
     search_results = nlp_controller.search_vector_db(project=project, query_text=search_request.text, limit=search_request.limit)
@@ -115,5 +116,40 @@ async def search_index(req: Request, project_id: str, search_request: SearchRequ
         )
     return JSONResponse(
         status_code=status.HTTP_200_OK,
-        content={"signal": ResponseStatus.COLLECTION_IS_FOUND.value, "search_results": search_results}
+        content={"signal": ResponseStatus.COLLECTION_IS_FOUND.value, "search_results": [chunk.dict() for chunk in search_results]}
+    )
+
+@nlp_router.post("/index/answer/{project_id}")
+async def search_index(req: Request, project_id: str, search_request: SearchRequest):
+    project_model = await ProjectModel.create_instance(
+        db_conn=req.app.state.mongodb_database
+    )
+
+    project = await project_model.get_project_or_create(project_id=project_id)
+
+    nlp_controller = NLPController(
+        vector_db_client=req.app.state.vector_db_client,
+        generation_client=req.app.state.generation_client,
+        embedding_client=req.app.state.embedding_client,
+        template_parser=req.app.state.template_parser
+    )
+
+    answer , full_prompt , chat_history = nlp_controller.generate_response(project=project, query=search_request.text, limit=search_request.limit)
+
+    serialized_history = [
+    {
+        "role": content.role,
+        "parts": [part.text for part in content.parts],
+    }
+    for content in chat_history
+]
+
+    if answer is None:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"signal": ResponseStatus.RAG_ANSWER_GENERATION_FAILED.value}
+        )
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={"signal": ResponseStatus.RAG_ANSWER_GENERATED.value, "answer": answer, "full_prompt": full_prompt, "chat_history": serialized_history}
     )

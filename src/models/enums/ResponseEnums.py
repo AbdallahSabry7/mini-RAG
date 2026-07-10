@@ -15,3 +15,5 @@ class ResponseStatus(Enum):
     SUCCESSFULLY_INSERTED_CHUNKS = "Successfully inserted data chunks into vector database."
     COLLECTION_NOT_FOUND = "Collection not found in vector database."
     COLLECTION_IS_FOUND = "Collection found in vector database."
+    RAG_ANSWER_GENERATED = "Successfully generated answer using RAG."
+    RAG_ANSWER_GENERATION_FAILED = "Failed to generate answer using RAG."

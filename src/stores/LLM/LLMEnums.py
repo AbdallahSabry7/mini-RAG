@@ -18,7 +18,7 @@ class CohereEnums(Enum):
     QUERY = "search_query"
 
 class GeminiEnums(Enum):
-    MODEL = "model"
+    SYSTEM = "model"
     USER = "user"
 
 class DocumentTypeEnums(Enum):
