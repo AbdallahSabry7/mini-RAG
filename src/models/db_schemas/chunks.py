@@ -28,6 +28,8 @@ class DataChunk(BaseModel):
             }
         ]
 
-
+class retrievedchunk(BaseModel):
+    text : str
+    score : float
 
         

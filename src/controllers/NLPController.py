@@ -4,11 +4,12 @@ from stores.LLM.LLMEnums import DocumentTypeEnums
 
 class NLPController(BaseController):
 
-    def __init__(self, vector_db_client, generation_client, embedding_client):
+    def __init__(self, vector_db_client, generation_client, embedding_client, template_parser):
         super().__init__()
         self.vector_db_client = vector_db_client
         self.generation_client = generation_client
         self.embedding_client = embedding_client
+        self.template_parser = template_parser
 
     def create_collection_name(self, project_id: str):
         return f"collection_{project_id}"
@@ -60,4 +61,35 @@ class NLPController(BaseController):
         )
 
         return search_results
+    
+    def generate_response(self, project : project , query : str , limit : int = 10):
+        answer , full_prompt , chat_history = None , None , None
+        search_results = self.search_vector_db(project=project, query_text=query, limit=limit)
+
+        if not search_results or len(search_results) == 0:
+            self.logger.error("No search results found.")
+            return answer , full_prompt , chat_history
+
+        system_prompt_template = self.template_parser.get(group="rag", key="system_prompt")
+        system_prompt = system_prompt_template.substitute()
+
+        document_prompt = "/n".join([
+            self.template_parser.get(group="rag", key="document_template", vars={"index": idx, "content": result.text, "score": result.score})
+            for idx, result in enumerate(search_results)
+        ])
+
+        footer_prompt = self.template_parser.get(group="rag", key="footer_template", vars={"question": query})
+
+        chat_history = [self.generation_client.construct_prompt(prompt=system_prompt, role=self.generation_client.enums.SYSTEM.value)]
+
+        full_prompt = "/n/n".join([
+            document_prompt,
+            footer_prompt
+        ])
+
+        answer = self.generation_client.generate_text(prompt=full_prompt, chat_history=chat_history)
+
+        return answer , full_prompt , chat_history
+
+
 
