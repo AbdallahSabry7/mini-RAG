@@ -107,5 +107,5 @@ class Gemini_provider(LLMInterface):
     def construct_prompt(self, prompt: str, role: str):
         return types.Content(
             role=role,
-            parts=[types.Part.from_text(text=self.process_text(prompt))]
+            parts=[types.Part.from_text(text=prompt)]
         )

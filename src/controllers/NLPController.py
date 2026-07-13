@@ -74,7 +74,7 @@ class NLPController(BaseController):
         system_prompt = system_prompt_template.substitute()
 
         document_prompt = "/n".join([
-            self.template_parser.get(group="rag", key="document_template", vars={"index": idx, "content": result.text, "score": result.score})
+            self.template_parser.get(group="rag", key="document_template", vars={"index": idx, "content": self.generation_client.process_text(result.text), "score": result.score})
             for idx, result in enumerate(search_results)
         ])
 
