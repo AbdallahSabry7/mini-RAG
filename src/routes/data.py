@@ -10,9 +10,10 @@ import aiofiles
 import models
 import logging
 from .schemas import processData 
-from models.db_schemas import DataChunk , FileSchema
+from models.db_schemas import DataChunk , File
 from models.FilesModel import FilesModel
 from models.enums.FileEnums import FileEnums
+
 
 logger = logging.getLogger('uvicorn.error')
 
@@ -21,13 +22,29 @@ data_router = APIRouter(
     tags = ['api_v1','data']
 )
 
+def clean_string(text: str) -> str:
+    return (
+        text.replace("\x00", "")
+            .encode("utf-8", "ignore")
+            .decode("utf-8", "ignore")
+    )
+
+def clean_metadata(obj):
+    if isinstance(obj, dict):
+        return {k: clean_metadata(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [clean_metadata(v) for v in obj]
+    elif isinstance(obj, str):
+        return clean_string(obj)
+    return obj
+
 @data_router.post("/process/{project_id}")
-async def process_data(req: Request, project_id: str, file: UploadFile,
+async def process_data(req: Request, project_id: int, file: UploadFile,
                     settings: Settings = Depends(get_settings)):
     app_settings = get_settings()
     
     project_model = await ProjectModel.create_instance(
-        db_conn=req.app.state.mongodb_database
+        db_conn=req.app.state.db_client
     )
 
     project = await project_model.get_project_or_create(project_id=project_id)
@@ -53,29 +70,29 @@ async def process_data(req: Request, project_id: str, file: UploadFile,
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=models.ResponseStatus.File_Upload_Failed.value)
     
     file_model = await FilesModel.create_instance(
-        db_conn=req.app.state.mongodb_database
+        db_conn=req.app.state.db_client
     )
 
-    file = FileSchema(
+    file = File(
         file_name = filename,
-        file_project_id = project.id,
+        file_project_id = project.project_id,
         file_size = os.path.getsize(file_location),
         file_type = FileEnums.FILE.value
     )
     file_record = await file_model.create_file(file_data=file)
 
     return JSONResponse(status_code=status.HTTP_200_OK, content={'signal' : models.ResponseStatus.File_Upload_Success.value,
-                        'file_id': str(file_record.id) , 'file_project_id': str(project.id)})
+                        'file_id': str(file_record.file_id) , 'file_project_id': str(project.project_id)})
     
 
 @data_router.post("/process_file/{project_id}")
-async def process_file(req: Request, project_id: str, data: processData):
+async def process_file(req: Request, project_id: int, data: processData):
     chunk_size = data.chunk_size
     overlap = data.overlap
     reset = data.reset
 
     project_model = await ProjectModel.create_instance(
-        db_conn=req.app.state.mongodb_database
+        db_conn=req.app.state.db_client
     )
 
     project = await project_model.get_project_or_create(project_id=project_id)
@@ -83,22 +100,22 @@ async def process_file(req: Request, project_id: str, data: processData):
     projects_files_ids = {}
 
     file_model = await FilesModel.create_instance(
-        db_conn=req.app.state.mongodb_database
+        db_conn=req.app.state.db_client
     )
 
     if data.file_id:
-        file_record = await file_model.get_file_by_filename(file_project_id=project.id, file_name=data.file_id)
+        file_record = await file_model.get_file_by_filename(file_project_id=project.project_id, file_name=data.file_id)
         if file_record is None:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"signal": models.ResponseStatus.File_Not_Found.value})
         
         projects_files_ids = {
-            file_record.id : file_record.file_name
+            file_record.file_id : file_record.file_name
         }
         
     else:
-        projects_files = await file_model.get_all_project_files(file_project_id=project.id, file_type=FileEnums.FILE.value)
+        projects_files = await file_model.get_all_project_files(file_project_id=project.project_id, file_type=FileEnums.FILE.value)
         projects_files_ids = {
-            record.id : record.file_name
+            record.file_id : record.file_name
             for record in projects_files
         }
 
@@ -113,12 +130,12 @@ async def process_file(req: Request, project_id: str, data: processData):
     no_files = 0
 
     chunk_model = await ChunkModel.create_instance(
-        db_conn=req.app.state.mongodb_database
+        db_conn=req.app.state.db_client
     )
 
     if reset == 1:
         no_deleted = await chunk_model.delete_chunks_by_project_id(
-                project_id=project.id
+                project_id=project.project_id
             )
         
         return JSONResponse(status_code=status.HTTP_200_OK, content={"signal": models.ResponseStatus.File_delete_success.value, "deleted_records": no_deleted})
@@ -140,10 +157,15 @@ async def process_file(req: Request, project_id: str, data: processData):
                 return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"signal": models.ResponseStatus.File_processing_failed.value})
             
             chunks_record = [
-                DataChunk(chunk_text=chunk.page_content, chunk_metadata=chunk.metadata, chunk_order=i+1, chunk_project_id=project.id , chunk_file_id=file_id)
-                for i,chunk in enumerate(chunks)
+                DataChunk(
+                    chunk_text=clean_string(chunk.page_content),
+                    chunk_metadata=clean_metadata(chunk.metadata),
+                    chunk_order=i + 1,
+                    chunk_project_id=project.project_id,
+                    chunk_file_id=file_id,
+                )
+                for i, chunk in enumerate(chunks)
             ]
-
             no_records += await chunk_model.create_chunks_bulk(chunks=chunks_record)
             no_files += 1
 

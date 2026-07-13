@@ -1,5 +1,5 @@
 from .BaseController import BaseController
-from models.db_schemas import project , DataChunk 
+from models.db_schemas import Project , DataChunk 
 from stores.LLM.LLMEnums import DocumentTypeEnums
 
 class NLPController(BaseController):
@@ -14,16 +14,16 @@ class NLPController(BaseController):
     def create_collection_name(self, project_id: str):
         return f"collection_{project_id}"
     
-    def reset_vector_db_collection(self, project : project):
+    def reset_vector_db_collection(self, project : Project):
         collection_name = self.create_collection_name(project_id=project.project_id)
         return self.vector_db_client.delete_collection(collection_name = collection_name)
     
-    def get_vector_db_collection(self, project : project):
+    def get_vector_db_collection(self, project : Project):
         collection_name = self.create_collection_name(project_id=project.project_id)
         collection_info = self.vector_db_client.get_collection_info(collection_name = collection_name)
         return collection_info
     
-    def index_into_vector_db(self, project : project, data_chunks : list[DataChunk] , do_reset : bool = False , chunks_ids : list[int] = None):
+    def index_into_vector_db(self, project : Project, data_chunks : list[DataChunk] , do_reset : bool = False , chunks_ids : list[int] = None):
 
         collection_name = self.create_collection_name(project_id=project.project_id)
 
@@ -42,7 +42,7 @@ class NLPController(BaseController):
         return True
         
 
-    def search_vector_db(self, project : project, query_text : str, limit : int = 10):
+    def search_vector_db(self, project : Project, query_text : str, limit : int = 10):
         collection_name = self.create_collection_name(project_id=project.project_id)
 
         embedding_vector = self.embedding_client.generate_embedding(
@@ -62,7 +62,7 @@ class NLPController(BaseController):
 
         return search_results
     
-    def generate_response(self, project : project , query : str , limit : int = 10):
+    def generate_response(self, project : Project , query : str , limit : int = 10):
         answer , full_prompt , chat_history = None , None , None
         search_results = self.search_vector_db(project=project, query_text=query, limit=limit)
 
@@ -74,7 +74,7 @@ class NLPController(BaseController):
         system_prompt = system_prompt_template.substitute()
 
         document_prompt = "/n".join([
-            self.template_parser.get(group="rag", key="document_template", vars={"index": idx, "content": result.text, "score": result.score})
+            self.template_parser.get(group="rag", key="document_template", vars={"index": idx, "content": self.generation_client.process_text(result.text), "score": result.score})
             for idx, result in enumerate(search_results)
         ])
 
