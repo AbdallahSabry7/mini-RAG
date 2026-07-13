@@ -8,15 +8,17 @@ from sqlalchemy import Index
 class File(sqlalchemy_base):
     __tablename__ = "files"
 
-    file_uuid = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4 , unique=True, nullable=False)
+    file_id = Column(Integer, primary_key=True, autoincrement=True)
+    file_uuid = Column(UUID(as_uuid=True), default=uuid.uuid4 , unique=True, nullable=False)
     file_name = Column(String, nullable=False)
     file_type = Column(String, nullable=False)
     file_size = Column(Integer, nullable=False)
     file_config = Column(JSONB, nullable=True, default={})
 
-    file_project_id = Column(UUID(as_uuid=True), ForeignKey("projects.project_id"), nullable=False)
+    file_project_id = Column(Integer, ForeignKey("projects.project_id"), nullable=False)
 
     project = relationship("Project", back_populates="files")
+    data_chunks = relationship("DataChunk", back_populates="file", cascade="all, delete-orphan")
 
     created_at = Column(DateTime(timezone=True), server_default=func.now() , nullable=False)
 

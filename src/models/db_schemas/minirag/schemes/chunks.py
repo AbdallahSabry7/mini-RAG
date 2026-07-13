@@ -9,12 +9,13 @@ from pydantic import BaseModel
 class DataChunk(sqlalchemy_base):
     __tablename__ = "data_chunks"
 
-    chunk_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4 , unique=True, nullable=False)
+    chunk_id = Column(Integer, primary_key=True , nullable=False, autoincrement=True)
+    chunk_uuid = Column(UUID(as_uuid=True), default=uuid.uuid4 , unique=True, nullable=False)
     chunk_text = Column(String, nullable=False)
     chunk_metadata = Column(JSONB, nullable=False, default={})
     chunk_order = Column(Integer, nullable=False)
-    chunk_project_id = Column(UUID(as_uuid=True), ForeignKey("projects.project_id"), nullable=False)
-    chunk_file_id = Column(UUID(as_uuid=True), ForeignKey("files.file_uuid"), nullable=False)
+    chunk_project_id = Column(Integer, ForeignKey("projects.project_id"), nullable=False)
+    chunk_file_id = Column(Integer, ForeignKey("files.file_id"), nullable=False)
 
     project = relationship("Project", back_populates="data_chunks")
     file = relationship("File", back_populates="data_chunks")
