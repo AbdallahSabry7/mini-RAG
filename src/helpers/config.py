@@ -1,3 +1,5 @@
+from typing import List
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -33,6 +35,7 @@ class Settings(BaseSettings):
     GENERATION_DEFAULT_MAX_TOKENS: int
     GENERATION_DEFAULT_TEMPERATURE: float
 
+    VECTOR_DB_BACKEND_LITERAL : List[str] = None
     VECTOR_DB_BACKEND: str  
     VECTOR_DB_PATH: str 
     VECTOR_DB_DISTANCE_METRIC: str 
