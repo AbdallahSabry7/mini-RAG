@@ -3,6 +3,7 @@ from google import genai
 from google.genai import types
 import logging
 from ..LLMEnums import GeminiEnums
+from typing import List , Union
 
 class Gemini_provider(LLMInterface):
     def __init__(self, api_key: str, default_input_max_tokens: int = 1000, default_output_max_tokens: int = 1000, default_temperature: float = 0.1):
@@ -74,7 +75,10 @@ class Gemini_provider(LLMInterface):
             self.logger.error(f"Error during Gemini generation: {e}")
             return None
 
-    def generate_embedding(self, text: str, document_type: str = None):
+    def generate_embedding(self, text: Union[str, List[str]], document_type: str = None):
+        if isinstance(text, str):
+            text = [text]
+
         if not self.client:
             self.logger.error("Gemini client is not initialized.")
             return None
@@ -98,7 +102,7 @@ class Gemini_provider(LLMInterface):
                 self.logger.error("No embedding data returned from Gemini.")
                 return None
                 
-            return response.embeddings[0].values
+            return [embedding.values for embedding in response.embeddings]
 
         except Exception as e:
             self.logger.error(f"Error during Gemini embedding generation: {e}")
