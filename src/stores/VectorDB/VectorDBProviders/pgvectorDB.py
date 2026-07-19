@@ -6,10 +6,13 @@ from models.db_schemas import retrievedchunk
 from sqlalchemy.sql import text as sql_text
 
 class pgvectorDB(VectorDBInterface):
-    def __init__(self, db_client : str , distance_metric : str , default_vector_size : int = 786):
+    def __init__(self, db_client : str , distance_metric : str , default_vector_size : int = 786, index_type : str = pgvectorIndexTypeEnums.HNSW.value , index_threshold : int = 100):
         self.client = db_client
         self.distance_metric = distance_metric
         self.default_vector_size = default_vector_size
+        self.index_type = index_type
+        self.index_threshold = index_threshold
+        self.default_index_name = lambda collection_name : f"{collection_name}_vector_idx"
 
         self.table_prefix = pgvectorTableSchema._PREFIX.value
         self.logger = logging.getLogger(__name__)
@@ -73,6 +76,54 @@ class pgvectorDB(VectorDBInterface):
             
             return True
         
+    async def is_index_exists(self, collection_name:str) -> bool:
+
+        index_name = self.default_index_name(collection_name)
+        async with self.client() as session:
+            async with session.begin():
+                check_index_sql = sql_text('SELECT 1 FROM pg_indexes WHERE tablename = :collection_name AND indexname = :index_name')
+                result = await session.execute(check_index_sql, {'collection_name': f"{collection_name}", 'index_name': f"{index_name}"})
+                return bool(result.scalar_one())
+            
+    async def create_index(self, collection_name:str, index_type:str = pgvectorIndexTypeEnums.HNSW.value):
+        index_name = self.default_index_name(collection_name)
+        if await self.is_index_exists(collection_name):
+            self.logger.warning(f"Index {index_name} already exists for collection {collection_name}. Skipping creation.")
+            return False
+        
+        async with self.client() as session:
+            async with session.begin():
+                count_sql = sql_text('SELECT COUNT(*) FROM :collection_name')
+                result = await session.execute(count_sql, {'collection_name': f"{collection_name}"})
+                record_count = result.scalar_one()
+
+                if record_count < self.index_threshold:
+                    self.logger.warning(f"Collection {collection_name} has {record_count} records, which is below the index threshold of {self.index_threshold}. Skipping index creation.")
+                    return False
+                
+                self.logger.info(f"Creating index {index_name} for collection {collection_name}...")
+                create_index_sql = sql_text(f'CREATE INDEX :index_name ON :collection_name USING {index_type} ({pgvectorTableSchema.VECTOR.value} {self.distance_metric})')
+                await session.execute(create_index_sql, {'collection_name': f"{collection_name}", 'index_name': f"{index_name}"})
+                await session.commit()
+
+                return True
+            
+    async def reset_index(self, collection_name:str):
+        if not await self.is_index_exists(collection_name):
+            self.logger.warning(f"Index does not exist for collection {collection_name}. Skipping reset.")
+            return False
+        
+        async with self.client() as session:
+            async with session.begin():
+                index_name = self.default_index_name(collection_name)
+                self.logger.info(f"Dropping index {index_name} for collection {collection_name}...")
+                drop_index_sql = sql_text('DROP INDEX IF EXISTS :index_name')
+                await session.execute(drop_index_sql, {'index_name': f"{index_name}"})
+                await session.commit()
+
+                return await self.create_index(collection_name, self.index_type)
+
+
     async def create_collection(self, collection_name:str, embedding_size:int, do_reset:bool = False):
         if do_reset:
             await self.delete_collection(collection_name)
