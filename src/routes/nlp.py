@@ -7,6 +7,7 @@ from models.chunkModel import ChunkModel
 from controllers import NLPController 
 from .schemas import NLPRequest , SearchRequest
 from models.enums.ResponseEnums import ResponseStatus
+from tqdm.auto import tqdm
 nlp_router = APIRouter(
     prefix = "/api/v1/nlp",
     tags = ['api_v1','nlp']
@@ -37,6 +38,9 @@ async def push_index(req: Request, project_id: int, push_request: NLPRequest):
     page_size = 50
     idx = 0
     inserted_count = 0
+    total_chunks_count = await data_chunk_model.get_total_chunks_count_by_project_id(project_id=project.project_id)
+    pbar = tqdm(total=total_chunks_count, desc="Indexing Chunks",position = 0)
+
     while has_records:
         data_chunks = await data_chunk_model.get_data_chunks_by_project_id(project_id=project.project_id, page= page_no, page_size= page_size)
         
@@ -50,7 +54,7 @@ async def push_index(req: Request, project_id: int, push_request: NLPRequest):
         chunks_ids = list(range(idx, idx + len(data_chunks)))
         idx += len(data_chunks)
 
-        is_inserted = nlp_controller.index_into_vector_db(project=project, data_chunks=data_chunks, chunks_ids=chunks_ids,do_reset=push_request.do_reset)
+        is_inserted = await nlp_controller.index_into_vector_db(project=project, data_chunks=data_chunks, chunks_ids=chunks_ids,do_reset=push_request.do_reset)
 
         if not is_inserted:
             return JSONResponse(
@@ -59,7 +63,9 @@ async def push_index(req: Request, project_id: int, push_request: NLPRequest):
             )
         
         inserted_count += len(data_chunks)
+        pbar.update(len(data_chunks))
 
+    pbar.close()
     return JSONResponse(
         status_code=status.HTTP_200_OK,
         content={"signal": ResponseStatus.SUCCESSFULLY_INSERTED_CHUNKS.value, "inserted_count": inserted_count}
@@ -81,7 +87,7 @@ async def pull_index(req: Request, project_id: int):
         template_parser=req.app.state.template_parser
     )
 
-    collection_info = nlp_controller.get_vector_db_collection(project=project)
+    collection_info = await nlp_controller.get_vector_db_collection(project=project)
 
     if collection_info is None:
         return JSONResponse(
@@ -109,7 +115,7 @@ async def search_index(req: Request, project_id: int, search_request: SearchRequ
         template_parser=req.app.state.template_parser
     )
 
-    search_results = nlp_controller.search_vector_db(project=project, query_text=search_request.text, limit=search_request.limit)
+    search_results = await nlp_controller.search_vector_db(project=project, query_text=search_request.text, limit=search_request.limit)
 
     if search_results is None:
         return JSONResponse(
@@ -136,7 +142,7 @@ async def search_index(req: Request, project_id: int, search_request: SearchRequ
         template_parser=req.app.state.template_parser
     )
 
-    answer , full_prompt , chat_history = nlp_controller.generate_response(project=project, query=search_request.text, limit=search_request.limit)
+    answer , full_prompt , chat_history =  await nlp_controller.generate_response(project=project, query=search_request.text, limit=search_request.limit)
 
     serialized_history = [
     {
