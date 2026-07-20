@@ -5,7 +5,7 @@ import os
 from models.projectModel import ProjectModel
 from models.chunkModel import ChunkModel
 from helpers.config import get_settings, Settings
-from controllers import DataController , ProjectController , ProcessController
+from controllers import DataController , ProjectController , ProcessController , NLPController
 import aiofiles
 import models
 import logging
@@ -129,11 +129,21 @@ async def process_file(req: Request, project_id: int, data: processData):
     no_records = 0
     no_files = 0
 
+    nlp_controller = await NLPController.create_instance(
+        vector_db_client=req.app.state.vector_db_client,
+        generation_client=req.app.state.generation_client,
+        embedding_client=req.app.state.embedding_client,
+        template_parser=req.app.state.template_parser
+    )
+
     chunk_model = await ChunkModel.create_instance(
         db_conn=req.app.state.db_client
     )
 
     if reset == 1:
+        collection_name = nlp_controller.create_collection_name(project_id=project.project_id)
+        _ = await nlp_controller.vector_db_client.delete_collection(collection_name = collection_name)
+
         no_deleted = await chunk_model.delete_chunks_by_project_id(
                 project_id=project.project_id
             )
