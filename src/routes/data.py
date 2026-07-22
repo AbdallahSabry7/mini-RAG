@@ -129,7 +129,7 @@ async def process_file(req: Request, project_id: int, data: processData):
     no_records = 0
     no_files = 0
 
-    nlp_controller = await NLPController.create_instance(
+    nlp_controller = NLPController(
         vector_db_client=req.app.state.vector_db_client,
         generation_client=req.app.state.generation_client,
         embedding_client=req.app.state.embedding_client,

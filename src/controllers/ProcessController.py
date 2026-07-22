@@ -25,7 +25,10 @@ class ProcessController(BaseController):
         if file_extension == ProcessEnums.PDF.value:
             return PyMuPDFLoader(file_path)
         elif file_extension == ProcessEnums.TXT.value:
-            return TextLoader(file_path)
+            return TextLoader(
+                        file_path,
+                        encoding="utf-8"
+                    )
         else:
             raise ValueError(f"Unsupported file type: {file_extension}")
         

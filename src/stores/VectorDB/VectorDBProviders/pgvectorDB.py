@@ -1,3 +1,5 @@
+import json
+
 from ..VectorDBInterface import VectorDBInterface
 from ..VectorDBEnums import pgvectorTableSchema , pgvectorDistanceMethodEnums , pgvectorIndexTypeEnums
 import logging
@@ -14,8 +16,13 @@ class pgvectorDB(VectorDBInterface):
         self.index_threshold = index_threshold
         self.default_index_name = lambda collection_name : f"{collection_name}_vector_idx"
 
+        if self.distance_metric == "Cosine":
+            self.distance_metric = pgvectorDistanceMethodEnums.COSINE.value
+        elif self.distance_metric == "Dot":
+            self.distance_metric = pgvectorDistanceMethodEnums.DOT.value
+
         self.table_prefix = pgvectorTableSchema._PREFIX.value
-        self.logger = logging.getLogger(__name__)
+        self.logger = logging.getLogger('uvicorn')
 
     async def connect(self):
         async with self.client() as session:
@@ -47,20 +54,27 @@ class pgvectorDB(VectorDBInterface):
     async def get_collection_info(self, collection_name:str):
         async with self.client() as session:
             async with session.begin():
-                table_info_sql = sql_text('''SELECT schemaname, tablename, tableowner, tablespace, hasindexes 
-                                        FROM pg_tables WHERE tablename = :collection_name
+                table_info_sql = sql_text(f'''SELECT schemaname, tablename, tableowner, tablespace, hasindexes 
+                                        FROM pg_tables WHERE tablename = '{collection_name}'
                 ''')
-                count_sql = sql_text('''SELECT COUNT(*) FROM :collection_name''')
+                count_sql = sql_text(f'SELECT COUNT(*) FROM {collection_name}')
 
-                table_info = await session.execute(table_info_sql, {'collection_name': f"{collection_name}"})
-                table_count = await session.execute(count_sql, {'collection_name': f"{collection_name}"})
+                table_info = await session.execute(table_info_sql)
+                table_count = await session.execute(count_sql)
 
                 table_data = table_info.fetchone()
                 if not table_data:
                     return None
                 
                 return {
-                    "table_info" : dict(table_data),
+                    "table_info" : {
+                        
+                        "schemaname" : table_data.schemaname,
+                        "tablename" : table_data.tablename,
+                        "tableowner" : table_data.tableowner,
+                        "tablespace" : table_data.tablespace,
+                        "hasindexes" : table_data.hasindexes
+                    },
                     "table_count" : table_count.scalar_one()
                 }
             
@@ -83,7 +97,7 @@ class pgvectorDB(VectorDBInterface):
             async with session.begin():
                 check_index_sql = sql_text('SELECT 1 FROM pg_indexes WHERE tablename = :collection_name AND indexname = :index_name')
                 result = await session.execute(check_index_sql, {'collection_name': f"{collection_name}", 'index_name': f"{index_name}"})
-                return bool(result.scalar_one())
+                return bool(result.scalar_one_or_none())
             
     async def create_index(self, collection_name:str, index_type:str = pgvectorIndexTypeEnums.HNSW.value):
         index_name = self.default_index_name(collection_name)
@@ -93,8 +107,8 @@ class pgvectorDB(VectorDBInterface):
         
         async with self.client() as session:
             async with session.begin():
-                count_sql = sql_text('SELECT COUNT(*) FROM :collection_name')
-                result = await session.execute(count_sql, {'collection_name': f"{collection_name}"})
+                count_sql = sql_text(f'SELECT COUNT(*) FROM {collection_name}')
+                result = await session.execute(count_sql)
                 record_count = result.scalar_one()
 
                 if record_count < self.index_threshold:
@@ -102,8 +116,8 @@ class pgvectorDB(VectorDBInterface):
                     return False
                 
                 self.logger.info(f"Creating index {index_name} for collection {collection_name}...")
-                create_index_sql = sql_text(f'CREATE INDEX :index_name ON :collection_name USING {index_type} ({pgvectorTableSchema.VECTOR.value} {self.distance_metric})')
-                await session.execute(create_index_sql, {'collection_name': f"{collection_name}", 'index_name': f"{index_name}"})
+                create_index_sql = sql_text(f'CREATE INDEX {index_name} ON {collection_name} USING {index_type} ({pgvectorTableSchema.VECTOR.value} {self.distance_metric})')
+                await session.execute(create_index_sql)
                 await session.commit()
 
                 return True
@@ -135,15 +149,15 @@ class pgvectorDB(VectorDBInterface):
         async with self.client() as session:
             async with session.begin():
                 self.logger.info(f"Creating collection {collection_name} with embedding size {embedding_size}...")
-                create_table_sql = sql_text('CREATE TABLE :collection_name ('
+                create_table_sql = sql_text(f'CREATE TABLE {collection_name} ('
                                             f'{pgvectorTableSchema.ID.value} bigserial PRIMARY KEY, '
                                             f'{pgvectorTableSchema.TEXT.value} text, '
                                             f'{pgvectorTableSchema.VECTOR.value} vector({embedding_size}), '
                                             f'{pgvectorTableSchema.METADATA.value} jsonb DEFAULT \'{{}}\', '
                                             f'{pgvectorTableSchema.CHUNK_ID.value} integer,'
-                                            f'FOREIGN KEY ({pgvectorTableSchema.CHUNK_ID.value}) REFERENCES chunks(chunk_id) ON DELETE CASCADE'
+                                            f'FOREIGN KEY ({pgvectorTableSchema.CHUNK_ID.value}) REFERENCES data_chunks(chunk_id) ON DELETE CASCADE'
                                             ')')
-                await session.execute(create_table_sql, {'collection_name': f"{collection_name}"})
+                await session.execute(create_table_sql)
                 await session.commit()
 
                 return True
@@ -161,55 +175,71 @@ class pgvectorDB(VectorDBInterface):
         
         async with self.client() as session:
             async with session.begin():
+                metadata_json = json.dumps(metadata) if metadata else '{}'
                 self.logger.info(f"Inserting record into collection {collection_name}...")
                 insert_sql = sql_text(f'INSERT INTO :collection_name ({pgvectorTableSchema.TEXT.value}, {pgvectorTableSchema.VECTOR.value}, {pgvectorTableSchema.METADATA.value}, {pgvectorTableSchema.CHUNK_ID.value}) VALUES (:text, :vector, :metadata, :chunk_id)')
                 await session.execute(insert_sql, {'collection_name': f"{collection_name}",
                                                     'text': text,
                                                     'vector': "[" + ", ".join(str(x) for x in vector) + "]",
-                                                    'metadata': metadata or {},
+                                                    'metadata': metadata_json,
                                                     'chunk_id': record_id})
                 await session.commit()
 
-                return True
+        await self.create_index(collection_name, self.index_type)
+
+        return True
         
 
 
-    async def insert_collection_batch(self, collection_name:str, texts:list, vectors:list, metadatas:list = None, record_ids:list = None, batch_size:int = 100): 
+    async def insert_collection_batch(self, collection_name: str, texts: list, vectors: list, metadatas: list = None, record_ids: list = None, batch_size: int = 20):
 
         if not await self.is_collection_exists(collection_name):
             self.logger.warning(f"Collection {collection_name} does not exist. Skipping batch insertion.")
             return False
 
-        if len(vectors) != len(record_ids) or len(vectors) != len(texts):
-            self.logger.warning(f"Vectors, record_ids, and texts must have the same length. Skipping batch insertion.")
+        if len(vectors) != len(record_ids):
+            self.logger.warning("Vectors and record_ids must have the same length. Skipping batch insertion.")
             return False
-        
-        if len(metadatas) == 0 or metadatas is None:
+
+        if metadatas is None or len(metadatas) == 0:
             metadatas = [{}] * len(vectors)
 
         async with self.client() as session:
-            async with session.begin():
-                self.logger.info(f"Inserting batch of records into collection {collection_name}...")
-                for i in range(0, len(vectors), batch_size):
-                    batch_texts = texts[i:i + batch_size]
-                    batch_vectors = vectors[i:i + batch_size]
-                    batch_metadatas = metadatas[i:i + batch_size]
-                    batch_record_ids = record_ids[i:i + batch_size]
+            self.logger.info(f"Inserting batch of records into collection {collection_name}...")
+            for i in range(0, len(vectors), batch_size):
+                batch_texts = texts[i:i + batch_size]
+                batch_vectors = vectors[i:i + batch_size]
+                batch_metadatas = metadatas[i:i + batch_size]
+                batch_record_ids = record_ids[i:i + batch_size]
 
-                    values = []
-                    for _text, _vector, _metadata, _record_id in zip(batch_texts, batch_vectors, batch_metadatas, batch_record_ids):
-                        values.append({
-                            "text" : _text,
-                            "vector" : "[" + ", ".join(str(x) for x in _vector) + "]",
-                            "metadata" : _metadata or {},
-                            "chunk_id" : _record_id
-                        })
+                values = []
+                for _text, _vector, _metadata, _record_id in zip(batch_texts, batch_vectors, batch_metadatas, batch_record_ids):
+                    metadata_json = json.dumps(_metadata) if _metadata else '{}'
+                    values.append({
+                        "text": _text,
+                        "vector": "[" + ", ".join(str(x) for x in _vector) + "]",
+                        "metadata": metadata_json,
+                        "chunk_id": _record_id
+                    })
 
-                    batch_insert_sql = sql_text(f'INSERT INTO :collection_name {pgvectorTableSchema.TEXT.value}, {pgvectorTableSchema.VECTOR.value}, {pgvectorTableSchema.METADATA.value}, {pgvectorTableSchema.CHUNK_ID.value} VALUES (:text, :vector, :metadata, :chunk_id)')
-                    await session.execute(batch_insert_sql, values, {'collection_name': f"{collection_name}"})
-                    
+                batch_insert_sql = sql_text(
+                    f'INSERT INTO {collection_name} '
+                    f'({pgvectorTableSchema.TEXT.value}, {pgvectorTableSchema.VECTOR.value}, '
+                    f'{pgvectorTableSchema.METADATA.value}, {pgvectorTableSchema.CHUNK_ID.value}) '
+                    f'VALUES (:text, :vector, :metadata, :chunk_id)'
+                )
 
-                return True
+                try:
+                    await session.execute(batch_insert_sql, values)
+                    await session.commit()
+                except Exception as e:
+                    self.logger.error(f"Failed to insert batch {i}-{i+batch_size} into {collection_name}: {e}")
+                    await session.rollback()
+                    # don't return False here — keep going so other batches still get inserted
+                    continue
+
+        await self.create_index(collection_name, self.index_type)
+        return True
             
     async def search_collection_by_vector(self, collection_name:str , vector:list , limit:int = 10) -> List[retrievedchunk]:
 
@@ -221,20 +251,14 @@ class pgvectorDB(VectorDBInterface):
         async with self.client() as session:
             async with session.begin():
                 self.logger.info(f"Searching collection {collection_name} by vector...")
-                search_sql = sql_text(f'SELECT {pgvectorTableSchema.TEXT.value} as text , {pgvectorTableSchema.VECTOR.value} <=> :vector as score',
-                                    'FROM :collection_name ',
-                                    'ORDER BY score DESC ',
-                                    'LIMIT :limit')
-                session_result = await session.execute(search_sql, {'collection_name': f"{collection_name}",
-                                                                    'vector': vector,
-                                                                    'limit': limit})
+                search_sql = sql_text(f"SELECT {pgvectorTableSchema.TEXT.value} as text , {pgvectorTableSchema.VECTOR.value} <=> :vector as score "
+                                    f"FROM {collection_name} "
+                                    f"ORDER BY score DESC "
+                                    f"LIMIT :limit")
+                session_result = await session.execute(search_sql, {'vector': vector, 'limit': limit})
                 records = session_result.fetchall()
                 
-                return {
-                    retrievedchunk(**{
-                        "text" : record.text,
-                        "score" : record.score
-                    })
-
-                    for record in records
-                }
+                return [retrievedchunk(**{
+                    "text" : record.text,
+                    "score" : record.score
+                }) for record in records]

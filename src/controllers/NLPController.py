@@ -1,6 +1,10 @@
 from .BaseController import BaseController
 from models.db_schemas import Project , DataChunk 
 from stores.LLM.LLMEnums import DocumentTypeEnums
+from typing import List
+import logging
+
+
 
 class NLPController(BaseController):
 
@@ -10,6 +14,8 @@ class NLPController(BaseController):
         self.generation_client = generation_client
         self.embedding_client = embedding_client
         self.template_parser = template_parser
+
+        self.logger = logging.getLogger('uvicorn')
 
     def create_collection_name(self, project_id: str):
         return f"collection_{self.vector_db_client.default_vector_size}_{project_id}"
@@ -23,7 +29,7 @@ class NLPController(BaseController):
         collection_info = await self.vector_db_client.get_collection_info(collection_name = collection_name)
         return collection_info
     
-    async def index_into_vector_db(self, project : Project, data_chunks : list[DataChunk] , do_reset : bool = False , chunks_ids : list[int] = None):
+    async def index_into_vector_db(self, project : Project, data_chunks : List[DataChunk] , do_reset : bool = False , chunks_ids : List[int] = None):
 
         collection_name = self.create_collection_name(project_id=project.project_id)
 
@@ -32,9 +38,27 @@ class NLPController(BaseController):
 
         vectors =  self.embedding_client.generate_embedding(text = texts , document_type = DocumentTypeEnums.RETRIEVAL_DOCUMENT.value)
 
+        filtered_texts, filtered_vectors, filtered_metadatas, filtered_ids = [], [], [], []
+        skipped = 0
+        for text, vector, metadata, record_id in zip(texts, vectors, metadatas, chunks_ids):
+            if vector is None:
+                skipped += 1
+                continue
+            filtered_texts.append(text)
+            filtered_vectors.append(vector)
+            filtered_metadatas.append(metadata)
+            filtered_ids.append(record_id)
+
+        if skipped:
+            self.logger.warning(f"Skipped {skipped}/{len(texts)} chunks due to embedding failures.")
+
+        if not filtered_vectors:
+            self.logger.warning("No valid embeddings to insert after filtering.")
+            return False
+
         await self.vector_db_client.create_collection(collection_name=collection_name, embedding_size=self.embedding_client.embedding_size, do_reset=False)
 
-        await self.vector_db_client.insert_collection_batch(collection_name=collection_name, vectors=vectors, texts=texts, metadatas=metadatas, record_ids=chunks_ids)
+        await self.vector_db_client.insert_collection_batch(collection_name=collection_name, vectors=filtered_vectors, texts=filtered_texts, metadatas=filtered_metadatas, record_ids=filtered_ids)
 
         return True
         
@@ -42,7 +66,7 @@ class NLPController(BaseController):
     async def search_vector_db(self, project : Project, query_text : str, limit : int = 10):
         collection_name = self.create_collection_name(project_id=project.project_id)
 
-        embedding_vector = await self.embedding_client.generate_embedding(
+        embedding_vector = self.embedding_client.generate_embedding(
             text=query_text,
             document_type=DocumentTypeEnums.RETRIEVAL_QUERY.value
         )
@@ -51,12 +75,9 @@ class NLPController(BaseController):
             self.logger.error("Failed to generate embedding for the query text.")
             return False
 
-        if isinstance(embedding_vector, list) and len(embedding_vector) > 0:
-            query_vector = embedding_vector[0]
-
         search_results = await self.vector_db_client.search_collection_by_vector(
             collection_name=collection_name,
-            vector=query_vector,
+            vector=embedding_vector,
             limit=limit
         )
 

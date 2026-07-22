@@ -63,7 +63,7 @@ class QDrantDB(VectorDBInterface):
             _ = await self.delete_collection(collection_name)
         if not await self.is_collection_exists(collection_name):
             self.logger.info(f"Creating collection '{collection_name}' with embedding size {embedding_size} and distance metric {self.distance_metric}.")
-            _ = await self.client.create_collection(
+            _ = self.client.create_collection(
                     collection_name=collection_name,
                     vectors_config=models.VectorParams(
                         size=embedding_size,

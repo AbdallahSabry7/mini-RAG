@@ -35,7 +35,7 @@ async def push_index(req: Request, project_id: int, push_request: NLPRequest):
 
     has_records = True
     page_no = 1
-    page_size = 50
+    page_size = 25
     idx = 0
     inserted_count = 0
     total_chunks_count = await data_chunk_model.get_total_chunks_count_by_project_id(project_id=project.project_id)
@@ -51,7 +51,7 @@ async def push_index(req: Request, project_id: int, push_request: NLPRequest):
             has_records = False
             break
 
-        chunks_ids = list(range(idx, idx + len(data_chunks)))
+        chunks_ids = [data_chunk.chunk_id for data_chunk in data_chunks]
         idx += len(data_chunks)
 
         is_inserted = await nlp_controller.index_into_vector_db(project=project, data_chunks=data_chunks, chunks_ids=chunks_ids,do_reset=push_request.do_reset)
