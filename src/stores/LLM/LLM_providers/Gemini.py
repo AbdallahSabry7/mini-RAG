@@ -75,73 +75,46 @@ class Gemini_provider(LLMInterface):
             self.logger.error(f"Error during Gemini generation: {e}")
             return None
 
-    def generate_embedding(self, text: Union[str, List[str]], document_type: str = None, batch_size: int = 20):
-        is_single = isinstance(text, str)
-        texts = [text] if is_single else text
-
+    def generate_embedding(self, texts: Union[str, List[str]], document_type: str = None):
+        #current gemini embedding model doesn't support batch embedding, so we will loop through the list of texts and get embeddings one by one
         if not self.client:
-            self.logger.error("Gemini client is not initialized.")
-            return None if is_single else [None] * len(texts)
+            self.logger.error("Gemini client was not set")
+            return None
+
+        is_single = False
+
+        if isinstance(texts, str):
+            is_single = True
+            texts = [texts]
 
         if not self.embedding_model_id:
-            self.logger.error("Embedding model ID is not set.")
-            return None if is_single else [None] * len(texts)
+            self.logger.error("Embedding model for Gemini was not set")
+            return None
 
-        config = None
         if document_type:
-            config = types.EmbedContentConfig(task_type=document_type, output_dimensionality=768)
-
-        all_embeddings = []
-
-        for i in range(0, len(texts), batch_size):
-            batch = texts[i:i + batch_size]
-            batch_embeddings = self._embed_batch_with_fallback(batch, config)
-            all_embeddings.extend(batch_embeddings)
-
-        # Return a single flat vector for single-string input, list of vectors otherwise
-        return all_embeddings[0] if is_single else all_embeddings
-
-
-    def _embed_batch_with_fallback(self, batch: List[str], config):
-        try:
-            response = self.client.models.embed_content(
-                model=self.embedding_model_id,
-                contents=batch,
-                config=config
+            config = types.EmbedContentConfig(
+            task_type=document_type,
+            output_dimensionality=self.embedding_size,
             )
-            if response and response.embeddings and len(response.embeddings) == len(batch):
-                return [self._to_plain_vector(e.values) for e in response.embeddings]
-        except Exception as e:
-            self.logger.warning(f"Batch embed failed ({len(batch)} texts), falling back to per-item: {e}")
+        else:
+            config = None
 
-        results = []
-        for single_text in batch:
-            results.append(self._embed_single_with_retry(single_text, config))
-        return results
+        vectors = []  
+        for t in texts:
+            result = self.client.models.embed_content(   
+                model=self.embedding_model_id,
+                contents=t,
+                config=config,
+            )
+            if result and result.embeddings:
+                vectors.append([float(v) for v in result.embeddings[0].values])
+            else:
+                self.logger.error(f"Embedding failed for text: {t[:50]}...")
+                vectors.append(None)
 
+        return vectors[0] if is_single else vectors
 
-    def _embed_single_with_retry(self, single_text: str, config, retries: int = 2):
-        text_to_send = single_text if single_text and single_text.strip() else " "
-
-        for attempt in range(retries + 1):
-            try:
-                response = self.client.models.embed_content(
-                    model=self.embedding_model_id,
-                    contents=[text_to_send],
-                    config=config
-                )
-                if response and response.embeddings:
-                    return self._to_plain_vector(response.embeddings[0].values)
-            except Exception as e:
-                self.logger.warning(f"Single embed attempt {attempt+1} failed: {e}")
-
-        self.logger.warning("Skipping this text after repeated embedding failures (no fallback vector).")
-        return None
-
-
-    def _to_plain_vector(self, values) -> List[float]:
-        """Force any SDK-native repeated/proto container into a plain list of plain floats."""
-        return [float(v) for v in values]
+    
     def construct_prompt(self, prompt: str, role: str):
         return types.Content(
             role=role,

@@ -36,29 +36,13 @@ class NLPController(BaseController):
         texts = [chunk.chunk_text for chunk in data_chunks]
         metadatas = [chunk.chunk_metadata for chunk in data_chunks]
 
-        vectors =  self.embedding_client.generate_embedding(text = texts , document_type = DocumentTypeEnums.RETRIEVAL_DOCUMENT.value)
+        vectors =  self.embedding_client.generate_embedding(texts = texts , document_type = DocumentTypeEnums.RETRIEVAL_DOCUMENT.value)
 
-        filtered_texts, filtered_vectors, filtered_metadatas, filtered_ids = [], [], [], []
-        skipped = 0
-        for text, vector, metadata, record_id in zip(texts, vectors, metadatas, chunks_ids):
-            if vector is None:
-                skipped += 1
-                continue
-            filtered_texts.append(text)
-            filtered_vectors.append(vector)
-            filtered_metadatas.append(metadata)
-            filtered_ids.append(record_id)
+        print(f"Indexing {len(vectors)} vectors into collection: {collection_name}")
 
-        if skipped:
-            self.logger.warning(f"Skipped {skipped}/{len(texts)} chunks due to embedding failures.")
+        await self.vector_db_client.create_collection(collection_name=collection_name, embedding_size=self.embedding_client.embedding_size, do_reset=do_reset)
 
-        if not filtered_vectors:
-            self.logger.warning("No valid embeddings to insert after filtering.")
-            return False
-
-        await self.vector_db_client.create_collection(collection_name=collection_name, embedding_size=self.embedding_client.embedding_size, do_reset=False)
-
-        await self.vector_db_client.insert_collection_batch(collection_name=collection_name, vectors=filtered_vectors, texts=filtered_texts, metadatas=filtered_metadatas, record_ids=filtered_ids)
+        await self.vector_db_client.insert_collection_batch(collection_name=collection_name, vectors=vectors, texts=texts, metadatas=metadatas, record_ids=chunks_ids)
 
         return True
         
@@ -67,7 +51,7 @@ class NLPController(BaseController):
         collection_name = self.create_collection_name(project_id=project.project_id)
 
         embedding_vector = self.embedding_client.generate_embedding(
-            text=query_text,
+            texts=query_text,
             document_type=DocumentTypeEnums.RETRIEVAL_QUERY.value
         )
 
