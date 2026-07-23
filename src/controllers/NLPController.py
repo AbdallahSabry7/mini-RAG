@@ -108,7 +108,7 @@ class NLPController(BaseController):
             footer_prompt
         ])
 
-        answer = await self.generation_client.generate_text(prompt=full_prompt, chat_history=chat_history)
+        answer = self.generation_client.generate_text(prompt=full_prompt, chat_history=chat_history)
 
         return answer , full_prompt , chat_history
 
